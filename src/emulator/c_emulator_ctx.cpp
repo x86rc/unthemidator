@@ -1,4 +1,5 @@
 #include <array>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -256,6 +257,8 @@ void c_emulator_ctx::set_file_sources(const std::string &input_name, const std::
     if (!m_file_handles.empty()) {
         throw std::runtime_error("emulator ctx: file sources are already in use");
     }
+
+    m_input_path = input_name;
 
     const auto input = file_name(input_name);
     const auto license_file = file_name(license_name);
@@ -1293,5 +1296,139 @@ void c_emulator_ctx::initialize_windows_ldr() const {
 
         write_ptr(head, node);
         write_ptr(head + ptr_size, node);
+    }
+
+    initialize_windows_process_parameters(peb_base);
+}
+
+void c_emulator_ctx::initialize_windows_process_parameters(const uint64_t peb_base) const {
+    constexpr uint64_t k_page_size = 0x1000;
+
+    const auto is_x86 = get_arch() == e_architecture::k_x86;
+
+    if (get_arch() != e_architecture::k_amd64 && get_arch() != e_architecture::k_x86) {
+        return;
+    }
+
+    auto *uc = m_uc;
+
+    // RTL_USER_PROCESS_PARAMETERS field offsets (Windows 10 x64 / x86 layout).
+    const uint64_t off_maximum_length = 0x00;
+    const uint64_t off_length = 0x04;
+    const uint64_t off_current_directory = is_x86 ? 0x24 : 0x38;
+    const uint64_t off_dll_path = is_x86 ? 0x30 : 0x50;
+    const uint64_t off_image_path_name = is_x86 ? 0x38 : 0x60;
+    const uint64_t off_command_line = is_x86 ? 0x40 : 0x70;
+    const uint64_t off_environment = is_x86 ? 0x48 : 0x80;
+
+    // String storage inside the parameters page.
+    constexpr uint64_t k_image_path_offset = 0x200;
+    constexpr uint64_t k_command_line_offset = 0x300;
+    constexpr uint64_t k_current_directory_offset = 0x400;
+    constexpr uint64_t k_dll_path_offset = 0x500;
+    constexpr uint64_t k_environment_offset = 0x600;
+
+    const auto to_utf16 = [](const std::string &value) {
+        std::u16string result{};
+        result.reserve(value.size());
+
+        for (const char character : value) {
+            result.push_back(static_cast<char16_t>(static_cast<unsigned char>(character)));
+        }
+
+        return result;
+    };
+
+    std::string image_path = m_input_path;
+
+    if (image_path.empty()) {
+        image_path = "C:\\unthemidator.exe";
+    } else if (image_path.size() < 2 || image_path[1] != ':') {
+        image_path = "C:\\" + file_name(image_path);
+    }
+
+    std::string current_directory = "C:\\";
+
+    if (const auto separator = image_path.find_last_of("\\/"); separator != std::string::npos) {
+        current_directory = image_path.substr(0, separator);
+
+        if (current_directory.size() == 2) {
+            current_directory += "\\";
+        }
+    }
+
+    const auto image_path_utf16 = to_utf16(image_path);
+    const auto command_line_utf16 = to_utf16("\"" + image_path + "\"");
+    const auto current_directory_utf16 = to_utf16(current_directory);
+    const auto dll_path_utf16 = to_utf16("C:\\Windows\\System32");
+
+    const auto params_base = m_memory_manager->allocate_helper_stub(k_page_size);
+
+    if (!params_base) {
+        throw std::runtime_error("failed to allocate Windows process parameters");
+    }
+
+    std::array<uint8_t, k_page_size> params{};
+
+    const auto write_raw = [&](const uint64_t offset, const void *data, const size_t size) {
+        std::memcpy(params.data() + offset, data, size);
+    };
+
+    const auto write16 = [&](const uint64_t offset, const uint16_t value) {
+        write_raw(offset, &value, sizeof(value));
+    };
+
+    const auto write32 = [&](const uint64_t offset, const uint32_t value) {
+        write_raw(offset, &value, sizeof(value));
+    };
+
+    const auto write_ptr = [&](const uint64_t offset, const uint64_t value) {
+        if (is_x86) {
+            write32(offset, static_cast<uint32_t>(value));
+        } else {
+            write_raw(offset, &value, sizeof(value));
+        }
+    };
+
+    const auto write_unicode_string = [&](const uint64_t offset, const uint64_t string_offset,
+        const std::u16string &value) {
+        const auto byte_size = static_cast<uint16_t>(value.size() * sizeof(char16_t));
+
+        write16(offset, byte_size);
+        write16(offset + 2, static_cast<uint16_t>(byte_size + sizeof(char16_t)));
+        write_ptr(offset + (is_x86 ? 4 : 8), params_base + string_offset);
+        write_raw(string_offset, value.data(), byte_size);
+    };
+
+    write32(off_maximum_length, static_cast<uint32_t>(k_page_size));
+    write32(off_length, static_cast<uint32_t>(k_page_size));
+
+    write_unicode_string(off_current_directory, k_current_directory_offset, current_directory_utf16);
+    write_unicode_string(off_dll_path, k_dll_path_offset, dll_path_utf16);
+    write_unicode_string(off_image_path_name, k_image_path_offset, image_path_utf16);
+    write_unicode_string(off_command_line, k_command_line_offset, command_line_utf16);
+
+    // Environment block: empty, double null terminated (the page is zeroed).
+    write_ptr(off_environment, params_base + k_environment_offset);
+
+    if (uc_mem_map(uc, params_base, k_page_size, UC_PROT_READ | UC_PROT_WRITE) != UC_ERR_OK) {
+        throw std::runtime_error("failed to map Windows process parameters");
+    }
+
+    if (uc_mem_write(uc, params_base, params.data(), params.size()) != UC_ERR_OK) {
+        throw std::runtime_error("failed to write Windows process parameters");
+    }
+
+    // PEB->ProcessParameters
+    if (is_x86) {
+        const auto value = static_cast<uint32_t>(params_base);
+
+        if (uc_mem_write(uc, peb_base + 0x10, &value, sizeof(value)) != UC_ERR_OK) {
+            throw std::runtime_error("failed to link Windows process parameters");
+        }
+    } else {
+        if (uc_mem_write(uc, peb_base + 0x20, &params_base, sizeof(params_base)) != UC_ERR_OK) {
+            throw std::runtime_error("failed to link Windows process parameters");
+        }
     }
 }

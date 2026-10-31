@@ -253,20 +253,54 @@ void hooks::get_volume_information_a(c_emulator_ctx *ctx) {
     ctx->set_result(1);
 }
 
+namespace {
+    // Copies an ASCII/ANSI path into a UTF-16 buffer with a terminating NUL and
+    // returns the number of characters written (excluding the NUL). The buffer
+    // capacity argument follows the Win32 convention: it counts characters and
+    // includes the space needed for the terminator.
+    uint32_t write_wide_path(const c_emulator_ctx *ctx, uint64_t buffer, uint64_t capacity, const std::string &text) {
+        std::u16string wide;
+        wide.reserve(text.size());
+        for (const char c : text) {
+            wide.push_back(static_cast<char16_t>(static_cast<unsigned char>(c)));
+        }
+
+        if (capacity > 0 && wide.size() > capacity - 1) {
+            wide.resize(static_cast<size_t>(capacity - 1));
+        }
+
+        if (buffer && !wide.empty()) {
+            uc_mem_write(ctx->get_uc(), buffer, wide.data(), wide.size() * sizeof(char16_t));
+        }
+
+        const char16_t terminator = 0;
+        if (buffer) {
+            uc_mem_write(ctx->get_uc(), buffer + wide.size() * sizeof(char16_t), &terminator, sizeof(terminator));
+        }
+
+        return static_cast<uint32_t>(wide.size());
+    }
+
+    // The emulated process lives in a fictional drive root: the packer only needs
+    // a consistent, well formed path, not the real location of the file on disk.
+    std::string sandbox_file_path(const c_emulator_ctx *ctx) {
+        const auto input = ctx->get_input_path();
+        const auto separator = input.find_last_of("\\/");
+        const std::string file = separator == std::string::npos ? input : input.substr(separator + 1);
+        return "C:\\" + file;
+    }
+}
+
 void hooks::get_current_dir(const c_emulator_ctx *ctx) {
-    const auto path = std::u16string(u"\\C:\\bebra.exe");
-
-    const auto buff_ptr = ctx->get_arg(1);
-    uc_mem_write(ctx->get_uc(), buff_ptr, path.data(), path.length() * sizeof(char16_t));
-
-    ctx->set_result(path.length() * sizeof(char16_t) + 2);
+    // GetCurrentDirectoryW(nBufferLength, lpBuffer)
+    const std::string directory = "C:\\";
+    const auto written = write_wide_path(ctx, ctx->get_arg(1), ctx->get_arg(0), directory);
+    ctx->set_result(written);
 }
 
 void hooks::get_module_filename(const c_emulator_ctx *ctx) {
-    const auto path = std::u16string(u"\\C:\\");
-
-    const auto buff_ptr = ctx->get_arg(1);
-    uc_mem_write(ctx->get_uc(), buff_ptr, path.data(), path.length() * sizeof(char16_t));
-
-    ctx->set_result(path.length() * sizeof(char16_t) + 2);
+    // GetModuleFileNameW(hModule, lpFilename, nSize)
+    const auto path = sandbox_file_path(ctx);
+    const auto written = write_wide_path(ctx, ctx->get_arg(1), ctx->get_arg(2), path);
+    ctx->set_result(written);
 }

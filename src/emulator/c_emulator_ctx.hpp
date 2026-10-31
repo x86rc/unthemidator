@@ -47,6 +47,7 @@ public:
     };
 
     void set_file_sources(const std::string &input_name, const std::string &license_name, std::vector<uint8_t> license);
+    [[nodiscard]] const std::string &get_input_path() const { return m_input_path; }
 
     uint64_t open_file(const std::string &path);
     uint64_t create_file_mapping(uint64_t handle, uint64_t size, uint32_t protection);
@@ -160,6 +161,10 @@ private:
     static bool fetch_prot_callback(uc_engine *uc, uc_mem_type type, uint64_t address, int size, int64_t value, c_emulator_ctx* ctx);
     [[nodiscard]] uc_err emulate(uint64_t start, uint64_t end, size_t count);
 
+    // Builds RTL_USER_PROCESS_PARAMETERS (image path, command line, current
+    // directory, environment) and links it into PEB->ProcessParameters.
+    void initialize_windows_process_parameters(uint64_t peb_base) const;
+
     std::optional<uint64_t> m_hook_resume;
     bool m_stop_requested = false;
     bool m_stop_on_import = false;
@@ -182,6 +187,7 @@ private:
     uint64_t m_next_handle = 0x10000;
 
     std::unordered_map<std::string, const std::vector<uint8_t>*> m_file_sources{};
+    std::string m_input_path{};
 
     std::vector<uint8_t> m_license_file{};
     std::unordered_map<uint64_t, s_file_handle> m_file_handles{};

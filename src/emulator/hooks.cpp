@@ -338,11 +338,22 @@ void hooks::local_alloc(c_emulator_ctx *ctx) {
     ctx->set_result(base);
 }
 
+namespace {
+    // The emulated process runs from a fictional drive root, so every path API has
+    // to agree with the others about where "the executable" lives.
+    std::string emulated_command_line(const c_emulator_ctx *ctx) {
+        const auto input = ctx->get_input_path();
+        const auto separator = input.find_last_of("\\/");
+        const std::string file = separator == std::string::npos ? input : input.substr(separator + 1);
+        return "\"C:\\" + file + "\"";
+    }
+}
+
 void hooks::get_command_line_a(c_emulator_ctx *ctx) {
     const auto str_location = ctx->allocate_storage(0x100);
 
-    const std::string command_line = R"("C:\bebra.exe")";
-    uc_mem_write(ctx->get_uc(), str_location, command_line.data(), command_line.length());
+    const auto command_line = emulated_command_line(ctx);
+    uc_mem_write(ctx->get_uc(), str_location, command_line.data(), command_line.length() + 1);
 
     ctx->set_result(str_location);
 }
@@ -350,8 +361,10 @@ void hooks::get_command_line_a(c_emulator_ctx *ctx) {
 void hooks::get_command_line_w(c_emulator_ctx *ctx) {
     const auto str_location = ctx->allocate_storage(0x100);
 
-    constexpr char16_t command_line[] = uR"("C:\bebra.exe")";
-    uc_mem_write(ctx->get_uc(), str_location, command_line, sizeof(command_line));
+    const auto command_line = emulated_command_line(ctx);
+    std::u16string wide_command_line(command_line.begin(), command_line.end());
+    wide_command_line.push_back(u'\0');
+    uc_mem_write(ctx->get_uc(), str_location, wide_command_line.data(), wide_command_line.size() * sizeof(char16_t));
 
     ctx->set_result(str_location);
 }
