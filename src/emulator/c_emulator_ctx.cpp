@@ -73,8 +73,35 @@ static int cpuid_callback(uc_engine *uc, void*) {
             break;
         }
 
+        case 0xD: {
+            // Ryzen 9 5950X, with x87/SSE/AVX enabled (XCR0 = 7, IA32_XSS = 0)
+            switch (ecx_in) {
+                case 0:
+                    eax = 0x00000207;
+                    ebx = 0x00000340;
+                    ecx = 0x00000988;
+                    break;
+
+                case 1:
+                    eax = 0x0000000F; // XSAVEOPT, XSAVEC, XGETBV1, XSAVES
+                    ebx = 0x00000340;
+                    ecx = 0x00001800;
+                    break;
+
+                case 2:
+                    eax = 0x00000100; // YMM upper halves size
+                    ebx = 0x00000240; // offset in the standard XSAVE area
+                    break;
+
+                default:
+                    break;
+            }
+
+            break;
+        }
+
         default:
-            // leaf not implemented РІР‚вЂќ return zeros
+            // leaf not implemented РІР‚ return zeros
             break;
     }
 
