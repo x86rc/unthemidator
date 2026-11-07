@@ -289,6 +289,7 @@ int main(int argc, char *argv[]) {
                     { "GetEnvironmentVariableA", { hooks::dummy_function, 3 } },
                     { "GetEnvironmentVariableW", { hooks::dummy_function, 3 } },
                     { "WriteFile", { hooks::dummy_true_function, 5 } },
+                    { "ReadFile", { hooks::read_file, 5 } },
                     { "DeleteFileA", { hooks::dummy_true_function, 1 } },
                     { "DeleteFileW", { hooks::dummy_true_function, 1 } },
                     { "InitializeSListHead", { hooks::dummy_function, 1 } },

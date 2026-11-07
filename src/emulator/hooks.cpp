@@ -472,6 +472,17 @@ void hooks::map_view_of_file(c_emulator_ctx *ctx) {
     ctx->set_result(base);
 }
 
+void hooks::read_file(c_emulator_ctx *ctx) {
+    const auto bytes_read = ctx->get_arg(3);
+    const auto success = !bytes_read || ctx->write<uint32_t>(bytes_read, 0);
+
+    if (!success) {
+        write_last_error(ctx, 998);
+    }
+
+    ctx->set_result(success);
+}
+
 void hooks::get_file_size(c_emulator_ctx *ctx) {
     const auto file_size_high_ptr = ctx->get_arg(1);
 

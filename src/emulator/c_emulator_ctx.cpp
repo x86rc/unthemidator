@@ -24,6 +24,7 @@ static void mem_callback(uc_engine *uc, const uc_mem_type type, const uint64_t a
 
 static bool mem_fault_callback(uc_engine *uc, const uc_mem_type type, const uint64_t address,
     const int size, const int64_t value, void* cb) {
+    //
     mem_callback(uc, type, address, size, value, cb);
     return false; // The observer does not repair the faulting mapping.
 }
