@@ -159,8 +159,25 @@ uint64_t c_imports::load_module(std::string module_name) {
     return image_base;
 }
 
+uint64_t c_imports::resolve_import(const std::string &module_name, const std::string &function_name) const {
+    const auto it_mod_exports = m_exports_by_name.find(module_name);
+
+    if (it_mod_exports == m_exports_by_name.end()) {
+        return 0;
+    }
+
+    const auto it_export = it_mod_exports->second.find(function_name);
+
+    if (it_export == it_mod_exports->second.end()) {
+        return 0;
+    }
+
+    return it_export->second.m_entry_address;
+}
+
 uint64_t c_imports::resolve_import(const uint64_t module_base, const std::string &function_name) const {
     const auto module = m_modules.find(module_base);
+
     if (module == m_modules.end()) {
         return 0;
     }
