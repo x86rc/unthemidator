@@ -248,6 +248,8 @@ int main(int argc, char *argv[]) {
                     { "CheckRemoteDebuggerPresent", { hooks::check_remote_debugger, 2 } },
                     { "IsWow64Process", { hooks::is_wow64_process, 2 } },
                     { "IsWow64Process2", { hooks::is_wow64_process2, 3 } },
+                    { "GetFileAttributesExA", { hooks::get_file_attributes_ex, 3 } },
+                    { "GetFileAttributesExW", { hooks::get_file_attributes_ex, 3 } },
                     { "GetFileSize", { hooks::get_file_size, 2 } },
                     { "MapViewOfFile", { hooks::map_view_of_file, 5 } },
                     { "LocalAlloc", { hooks::local_alloc, 2 } },

@@ -32,6 +32,7 @@ namespace hooks {
     void virtual_free(c_emulator_ctx *ctx);
     void virtual_protect(const c_emulator_ctx *ctx);
     void map_view_of_file(c_emulator_ctx *ctx);
+    void get_file_attributes_ex(c_emulator_ctx *ctx);
     void get_file_size(c_emulator_ctx *ctx);
     void get_token_information(c_emulator_ctx *ctx);
     void get_thread_context(c_emulator_ctx *ctx);
