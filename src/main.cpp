@@ -282,7 +282,7 @@ int main(int argc, char *argv[]) {
                     { "GetSystemFirmwareTable", { hooks::dummy_function, 4 } },
                     { "SetEnvironmentVariableA", { hooks::dummy_function, 2 } },
                     { "SetEnvironmentVariableW", { hooks::dummy_function, 2 } },
-                    { "Sleep", { hooks::dummy_function, 0 } },
+                    { "Sleep", { hooks::dummy_function, 1 } },
                     { "FreeLibrary", { hooks::dummy_function, 1 } },
                     { "CreateFileA", { hooks::create_file_a, 7 } },
                     { "DeviceIoControl", { hooks::dummy_function, 8 } },
