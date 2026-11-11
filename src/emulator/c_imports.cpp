@@ -7,6 +7,24 @@
 #include "../pe/pe_structs.hpp"
 #include "../pe/pe_utils.hpp"
 
+static std::shared_ptr<const nlohmann::json> get_catalog(const std::string &catalog_name) {
+    static std::unordered_map<std::string, std::shared_ptr<const nlohmann::json>> cache;
+
+    if (const auto it = cache.find(catalog_name); it != cache.end()) {
+        return it->second;
+    }
+
+    std::shared_ptr<const nlohmann::json> catalog = nullptr;
+
+    if (std::filesystem::exists(catalog_name)) {
+        std::ifstream catalog_stream(catalog_name);
+        catalog = std::make_shared<const nlohmann::json>(nlohmann::json::parse(catalog_stream));
+    }
+
+    cache.emplace(catalog_name, catalog);
+    return catalog;
+}
+
 c_imports::c_imports(c_emulator_ctx *emulator_ctx) : m_emulator_ctx(emulator_ctx) {
     // create modules directory if it doesn't exist
     if (!std::filesystem::is_directory("modules")) {
@@ -35,10 +53,10 @@ uint64_t c_imports::load_module(std::string module_name) {
         "catalog_32.json" : "catalog.json";
 
     // fallback to resolving from catalog
-    if (!pe_image && std::filesystem::exists(catalog_name)) {
-        std::ifstream catalog_stream(catalog_name);
-        const auto catalog = nlohmann::json::parse(catalog_stream);
-        catalog_stream.close();
+    const auto catalog_ptr = pe_image ? nullptr : get_catalog(catalog_name);
+
+    if (catalog_ptr) {
+        const auto &catalog = *catalog_ptr;
 
         // resolve api set (if applicable)
         if (catalog.contains("api_sets") && catalog.at("api_sets").contains(module_name)) {
@@ -119,7 +137,6 @@ uint64_t c_imports::load_module(std::string module_name) {
     m_module_addresses.emplace(module_name, image_base);
     m_modules.emplace(image_base, module_name);
     m_exports_by_name.emplace(module_name, std::unordered_map<std::string, s_dummy_export>{});
-
     auto &module_exports = m_exports_by_name.at(module_name);
     module_exports.reserve(exports.size());
 
