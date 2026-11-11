@@ -212,11 +212,15 @@ void hooks::get_module_handle(const c_emulator_ctx *ctx) {
     }
 
     const auto module_handle = ctx->get_imports()->load_module(module_name);
-
     ctx->set_result(module_handle);
 
-    std::cout << "[unthemidator][runtime] loaded module: " << module_name << " (forwarded to unthemidator.dummy) - 0x" <<
-            std::hex << module_handle << std::dec << std::endl;
+    if (module_handle) {
+        std::cout << "[unthemidator][runtime] loaded module: " << module_name << " (forwarded to unthemidator.dummy) - 0x" <<
+                std::hex << module_handle << std::dec << std::endl;
+    } else {
+        std::cerr << "[unthemidator][runtime] failed to load module " << module_name <<
+            ". Place the module in modules/ directory so the imports can be recovered" << std::endl;
+    }
 }
 
 void hooks::get_proc_address(const c_emulator_ctx *ctx) {
@@ -382,8 +386,7 @@ void hooks::get_version(const c_emulator_ctx *ctx) {
 }
 
 void hooks::virtual_alloc(c_emulator_ctx *ctx) {
-    const auto base = ctx->allocate_virtual(ctx->get_arg(0), ctx->get_arg(1),
-        static_cast<uint32_t>(ctx->get_arg(2)));
+    const auto base = ctx->allocate_virtual(ctx->get_arg(0), ctx->get_arg(1));
 
     if (!base) {
         write_last_error(ctx, 487);
@@ -470,6 +473,17 @@ void hooks::map_view_of_file(c_emulator_ctx *ctx) {
     }
 
     ctx->set_result(base);
+}
+
+void hooks::read_file(c_emulator_ctx *ctx) {
+    const auto bytes_read = ctx->get_arg(3);
+    const auto success = !bytes_read || ctx->write<uint32_t>(bytes_read, 0);
+
+    if (!success) {
+        write_last_error(ctx, 998);
+    }
+
+    ctx->set_result(success);
 }
 
 void hooks::get_file_size(c_emulator_ctx *ctx) {

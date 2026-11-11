@@ -76,7 +76,7 @@ Currently, the following variants are available:
 - Themida v3.0 - v3.2.6.0
 - Win License v3.0 - v3.2.6.0
 - Code Virtualizer (compressed VMs) v3.0 - v3.2.6.0
-- Code Virtualizer (compressed VMs, **experimental**) v4.0
+- Code Virtualizer (compressed VMs) v4.0
 
 ### Limitations
 

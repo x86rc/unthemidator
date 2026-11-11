@@ -138,7 +138,7 @@ public:
 
     bool free_storage(uint64_t address);
     bool free_heap(uint64_t address);
-    uint64_t allocate_virtual(uint64_t address, uint64_t size, uint32_t type);
+    uint64_t allocate_virtual(uint64_t address, uint64_t size);
     bool free_virtual(uint64_t address, uint64_t size, uint32_t type);
 
     void initialize_windows_ldr() const;

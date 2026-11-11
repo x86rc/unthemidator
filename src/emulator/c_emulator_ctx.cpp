@@ -24,6 +24,7 @@ static void mem_callback(uc_engine *uc, const uc_mem_type type, const uint64_t a
 
 static bool mem_fault_callback(uc_engine *uc, const uc_mem_type type, const uint64_t address,
     const int size, const int64_t value, void* cb) {
+    //
     mem_callback(uc, type, address, size, value, cb);
     return false; // The observer does not repair the faulting mapping.
 }
@@ -72,8 +73,35 @@ static int cpuid_callback(uc_engine *uc, void*) {
             break;
         }
 
+        case 0xD: {
+            // Ryzen 9 5950X, with x87/SSE/AVX enabled (XCR0 = 7, IA32_XSS = 0)
+            switch (ecx_in) {
+                case 0:
+                    eax = 0x00000207;
+                    ebx = 0x00000340;
+                    ecx = 0x00000988;
+                    break;
+
+                case 1:
+                    eax = 0x0000000F; // XSAVEOPT, XSAVEC, XGETBV1, XSAVES
+                    ebx = 0x00000340;
+                    ecx = 0x00001800;
+                    break;
+
+                case 2:
+                    eax = 0x00000100; // YMM upper halves size
+                    ebx = 0x00000240; // offset in the standard XSAVE area
+                    break;
+
+                default:
+                    break;
+            }
+
+            break;
+        }
+
         default:
-            // leaf not implemented РІР‚вЂќ return zeros
+            // leaf not implemented РІР‚ return zeros
             break;
     }
 
@@ -1012,30 +1040,24 @@ bool c_emulator_ctx::free_storage(const uint64_t address) {
     return m_memory_manager->free_region(address);
 }
 
-uint64_t c_emulator_ctx::allocate_virtual(const uint64_t address, const uint64_t size, const uint32_t type) {
-    if (!size || size > 0xFFFFF000ULL || !(type & 0x3000) || type & ~0x3000U) {
+uint64_t c_emulator_ctx::allocate_virtual(const uint64_t address, const uint64_t size) {
+    if (!size || size > 0xFFFFF000ULL) {
         return 0;
     }
 
     if (!address) {
         const auto base = allocate_storage(static_cast<uint32_t>(size), "vm");
         const auto capacity = m_memory_manager->get_region_size(base);
-        const bool committed = (type & 0x1000) != 0;
-
-        if (!committed && uc_mem_unmap(m_uc, base, capacity) != UC_ERR_OK) {
-            free_storage(base);
-            return 0;
-        }
 
         m_storage_allocations.erase(base);
-        m_virtual_allocations.emplace(base, s_virtual_allocation{std::vector<bool>(capacity / 0x1000, committed)});
+        m_virtual_allocations.emplace(base, s_virtual_allocation{std::vector<bool>(capacity / 0x1000, true)});
 
         return base;
     }
 
     auto entry = m_virtual_allocations.upper_bound(address);
 
-    if (type != 0x1000 || entry == m_virtual_allocations.begin()) {
+    if (entry == m_virtual_allocations.begin()) {
         return 0;
     }
 
